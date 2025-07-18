@@ -1,0 +1,16 @@
+{
+  "entryPoints": ["src/lib/api/types.ts", "src/lib/api/client.ts", "src/lib/api/validation.ts"],
+  "out": "docs/api",
+  "name": "Evo Pro API Documentation",
+  "includeVersion": true,
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeExternals": true,
+  "excludeInternal": true,
+  "readme": "README.md",
+  "plugin": ["typedoc-plugin-markdown"],
+  "theme": "default",
+  "categorizeByGroup": true,
+  "categoryOrder": ["API Types", "API Client", "Validation", "*"],
+  "sort": ["source-order"]
+}

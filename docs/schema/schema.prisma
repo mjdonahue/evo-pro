@@ -1,0 +1,1646 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:/var/folders/ns/rxsrwl713qjb8y3ln_vsbn880000gn/T/evo-core-build.db"
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model sqlx_migrations {
+  version        BigInt?  @id
+  description    String
+  installed_on   DateTime @default(now())
+  success        Boolean
+  checksum       Bytes
+  execution_time BigInt
+
+  @@map("_sqlx_migrations")
+  @@ignore
+}
+
+model accounts {
+  id                                               Bytes       @id
+  name                                             String
+  description                                      String?
+  workspace_id                                     Bytes
+  primary_address_id                               Bytes?
+  account_type                                     Int         @default(0)
+  status                                           Int         @default(0)
+  metadata                                         String?
+  created_at                                       DateTime    @default(now())
+  updated_at                                       DateTime    @default(now())
+  addresses_accounts_primary_address_idToaddresses addresses?  @relation("accounts_primary_address_idToaddresses", fields: [primary_address_id], references: [id], onUpdate: NoAction)
+  workspaces                                       workspaces  @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  addresses_addresses_account_idToaccounts         addresses[] @relation("addresses_account_idToaccounts")
+
+  @@index([primary_address_id], map: "idx_accounts_primary_address_id")
+  @@index([name], map: "idx_accounts_name")
+  @@index([workspace_id], map: "idx_accounts_workspace_id")
+}
+
+model addresses {
+  id                                              Bytes      @id
+  user_id                                         Bytes?
+  contact_id                                      Bytes?
+  organization_id                                 Bytes?
+  account_id                                      Bytes?
+  type                                            Int        @default(0)
+  status                                          Int        @default(0)
+  street                                          String?
+  city                                            String?
+  state                                           String?
+  postal_code                                     String?
+  country                                         String?
+  country_code                                    String?
+  latitude                                        String?
+  longitude                                       String?
+  metadata                                        String?
+  created_at                                      DateTime   @default(now())
+  updated_at                                      DateTime   @default(now())
+  accounts_accounts_primary_address_idToaddresses accounts[] @relation("accounts_primary_address_idToaddresses")
+  accounts_addresses_account_idToaccounts         accounts?  @relation("addresses_account_idToaccounts", fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                                           users?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  contacts_addresses_contact_idTocontacts         contacts?  @relation("addresses_contact_idTocontacts", fields: [contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  contacts_contacts_primary_address_idToaddresses contacts[] @relation("contacts_primary_address_idToaddresses")
+
+  @@index([status], map: "idx_addresses_status")
+  @@index([type], map: "idx_addresses_type")
+  @@index([account_id], map: "idx_addresses_account_id")
+  @@index([user_id], map: "idx_addresses_user_id")
+  @@index([contact_id], map: "idx_addresses_contact_id")
+}
+
+model agent_chain_executions {
+  id                          Bytes                         @id
+  chain_id                    Bytes
+  conversation_id             Bytes?
+  triggered_by_id             Bytes?
+  status                      Int                           @default(0)
+  current_step_id             Bytes?
+  input_data                  String?
+  output_data                 String?
+  error_details               String?
+  execution_context           String?
+  started_at                  DateTime                      @default(now())
+  completed_at                DateTime?
+  created_at                  DateTime                      @default(now())
+  agent_chain_steps           agent_chain_steps?            @relation(fields: [current_step_id], references: [id], onUpdate: NoAction)
+  participants                participants?                 @relation(fields: [triggered_by_id], references: [id], onUpdate: NoAction)
+  conversations               conversations?                @relation(fields: [conversation_id], references: [id], onUpdate: NoAction)
+  agent_chains                agent_chains                  @relation(fields: [chain_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agent_chain_step_executions agent_chain_step_executions[]
+  agent_states                agent_states[]
+  p2p_message_queue           p2p_message_queue[]
+  tool_calls                  tool_calls[]
+
+  @@index([conversation_id], map: "idx_agent_chain_executions_conversation_id")
+  @@index([status], map: "idx_agent_chain_executions_status")
+  @@index([chain_id], map: "idx_agent_chain_executions_chain_id")
+}
+
+model agent_chain_step_executions {
+  id                     Bytes                  @id
+  execution_id           Bytes
+  step_id                Bytes
+  agent_id               Bytes
+  status                 Int                    @default(0)
+  input_data             String?
+  output_data            String?
+  error_details          String?
+  retry_attempt          Int?                   @default(0)
+  started_at             DateTime?
+  completed_at           DateTime?
+  created_at             DateTime               @default(now())
+  agents                 agents                 @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agent_chain_steps      agent_chain_steps      @relation(fields: [step_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agent_chain_executions agent_chain_executions @relation(fields: [execution_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tool_calls             tool_calls[]
+
+  @@index([status], map: "idx_agent_chain_step_executions_status")
+  @@index([step_id], map: "idx_agent_chain_step_executions_step_id")
+  @@index([execution_id], map: "idx_agent_chain_step_executions_execution_id")
+}
+
+model agent_chain_steps {
+  id                          Bytes                         @id
+  chain_id                    Bytes
+  step_number                 Int
+  agent_id                    Bytes
+  step_name                   String
+  step_type                   Int                           @default(0)
+  input_mapping               String?
+  output_mapping              String?
+  conditions                  String?
+  timeout_seconds             Int?                          @default(300)
+  retry_count                 Int?                          @default(0)
+  parallel_group_id           String?
+  depends_on                  String?
+  config                      String?
+  created_at                  DateTime                      @default(now())
+  agent_chain_executions      agent_chain_executions[]
+  agent_chain_step_executions agent_chain_step_executions[]
+  agents                      agents                        @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agent_chains                agent_chains                  @relation(fields: [chain_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([chain_id, step_number], map: "sqlite_autoindex_agent_chain_steps_2")
+  @@index([chain_id, step_number], map: "idx_agent_chain_steps_step_number")
+  @@index([agent_id], map: "idx_agent_chain_steps_agent_id")
+  @@index([chain_id], map: "idx_agent_chain_steps_chain_id")
+}
+
+model agent_chains {
+  id                     Bytes                    @id
+  workspace_id           Bytes
+  name                   String
+  description            String?
+  chain_type             Int                      @default(0)
+  status                 Int                      @default(0)
+  config                 String?
+  trigger_conditions     String?
+  error_handling         String?
+  metadata               String?
+  created_at             DateTime                 @default(now())
+  updated_at             DateTime                 @default(now())
+  created_by_id          Bytes?
+  agent_chain_executions agent_chain_executions[]
+  agent_chain_steps      agent_chain_steps[]
+  users                  users?                   @relation(fields: [created_by_id], references: [id], onUpdate: NoAction)
+  workspaces             workspaces               @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([chain_type], map: "idx_agent_chains_type")
+  @@index([status], map: "idx_agent_chains_status")
+  @@index([workspace_id], map: "idx_agent_chains_workspace_id")
+}
+
+model agent_collaboration_participants {
+  id                           Bytes                        @id
+  session_id                   Bytes
+  agent_id                     Bytes
+  role                         Int                          @default(0)
+  contribution_score           Float?                       @default(0.0)
+  joined_at                    DateTime                     @default(now())
+  left_at                      DateTime?
+  is_active                    Boolean                      @default(true)
+  agents                       agents                       @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agent_collaboration_sessions agent_collaboration_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([session_id, agent_id], map: "sqlite_autoindex_agent_collaboration_participants_2")
+  @@index([agent_id], map: "idx_agent_collaboration_participants_agent_id")
+  @@index([session_id], map: "idx_agent_collaboration_participants_session_id")
+}
+
+model agent_collaboration_sessions {
+  id                               Bytes                              @id
+  workspace_id                     Bytes
+  name                             String
+  description                      String?
+  session_type                     Int                                @default(0)
+  status                           Int                                @default(0)
+  coordinator_agent_id             Bytes?
+  objective                        String?
+  context_data                     String?
+  results                          String?
+  started_at                       DateTime                           @default(now())
+  ended_at                         DateTime?
+  created_at                       DateTime                           @default(now())
+  updated_at                       DateTime                           @default(now())
+  agent_collaboration_participants agent_collaboration_participants[]
+  agents                           agents?                            @relation(fields: [coordinator_agent_id], references: [id], onUpdate: NoAction)
+  workspaces                       workspaces                         @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([coordinator_agent_id], map: "idx_agent_collaboration_sessions_coordinator")
+  @@index([status], map: "idx_agent_collaboration_sessions_status")
+  @@index([workspace_id], map: "idx_agent_collaboration_sessions_workspace_id")
+}
+
+model agent_flow_templates {
+  id           Bytes      @id
+  name         String
+  description  String?
+  flow_data    String
+  framework    String
+  usecases     String?
+  type         Int        @default(0)
+  metadata     String?
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @default(now())
+  workspace_id Bytes
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([updated_at], map: "idx_agent_flow_templates_updated_at")
+  @@index([created_at], map: "idx_agent_flow_templates_created_at")
+  @@index([type], map: "idx_agent_flow_templates_type")
+  @@index([framework], map: "idx_agent_flow_templates_framework")
+  @@index([workspace_id], map: "idx_agent_flow_templates_workspace_id")
+}
+
+model agent_flows {
+  id           Bytes      @id
+  agent_id     Bytes
+  name         String
+  flow_data    String
+  agent_config String?
+  version      String     @default("1.0.0")
+  status       Int        @default(0)
+  permissions  String?
+  api_key_id   Bytes?
+  api_config   String?
+  is_deployed  Boolean    @default(false)
+  is_public    Boolean    @default(false)
+  metadata     String?
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @default(now())
+  workspace_id Bytes
+  api_keys     api_keys?  @relation(fields: [api_key_id], references: [id], onUpdate: NoAction)
+  agents       agents     @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([api_key_id], map: "idx_agent_flows_api_key_id")
+  @@index([workspace_id], map: "idx_agent_flows_workspace_id")
+  @@index([agent_id], map: "idx_agent_flows_agent_id")
+}
+
+model agent_memories {
+  id            Bytes     @id
+  agent_id      Bytes
+  content       String
+  importance    Int       @default(0)
+  last_accessed DateTime?
+  metadata      String
+  embedding_id  Bytes?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now())
+
+  @@index([last_accessed], map: "idx_agent_memories_last_accessed")
+  @@index([importance(sort: Desc)], map: "idx_agent_memories_importance")
+  @@index([agent_id], map: "idx_agent_memories_agent_id")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model agent_memories_fts {
+  content Unsupported("")?
+
+  @@ignore
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model agent_memories_fts_config {
+  k Unsupported("")  @id
+  v Unsupported("")?
+
+  @@ignore
+}
+
+model agent_memories_fts_data {
+  id    Int    @id @default(autoincrement())
+  block Bytes?
+}
+
+model agent_memories_fts_docsize {
+  id Int    @id @default(autoincrement())
+  sz Bytes?
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model agent_memories_fts_idx {
+  segid Unsupported("")
+  term  Unsupported("")
+  pgno  Unsupported("")?
+
+  @@id([segid, term])
+  @@ignore
+}
+
+model agent_models {
+  id          Bytes    @id
+  agent_id    Bytes
+  model_id    Bytes
+  is_default  Boolean  @default(false)
+  config      String?
+  max_tokens  Int      @default(0)
+  temperature Float?
+  top_p       Float?
+  created_at  DateTime @default(now())
+  models      models   @relation(fields: [model_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents      agents   @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([model_id], map: "idx_agent_models_model_id")
+  @@index([agent_id], map: "idx_agent_models_agent_id")
+}
+
+model agent_operators {
+  id                                         Bytes    @id
+  agent_id                                   Bytes
+  operator_id                                Bytes
+  priority                                   Int      @default(0)
+  specialties                                String?
+  is_active                                  Boolean  @default(true)
+  metadata                                   String?
+  created_at                                 DateTime @default(now())
+  agents_agent_operators_operator_idToagents agents   @relation("agent_operators_operator_idToagents", fields: [operator_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents_agent_operators_agent_idToagents    agents   @relation("agent_operators_agent_idToagents", fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([operator_id], map: "idx_agent_operators_operator_id")
+  @@index([agent_id], map: "idx_agent_operators_agent_id")
+}
+
+model agent_performance_metrics {
+  id              Bytes          @id
+  agent_id        Bytes
+  conversation_id Bytes?
+  metric_type     Int
+  value           Float
+  context         String?
+  measured_at     DateTime       @default(now())
+  created_at      DateTime       @default(now())
+  conversations   conversations? @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents          agents         @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([agent_id], map: "idx_agent_performance_metrics_agent_id")
+}
+
+model agent_registry {
+  id           Bytes      @id
+  workspace_id Bytes
+  name         String
+  description  String?
+  version      String
+  config       String?
+  is_public    Boolean    @default(false)
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @default(now())
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents       agents[]
+
+  @@index([workspace_id], map: "idx_agent_registry_workspace_id")
+}
+
+model agent_states {
+  id                     Bytes                   @id
+  agent_id               Bytes
+  conversation_id        Bytes?
+  chain_execution_id     Bytes?
+  state_key              String
+  state_value            String
+  state_type             Int                     @default(0)
+  expires_at             DateTime?
+  created_at             DateTime                @default(now())
+  updated_at             DateTime                @default(now())
+  agent_chain_executions agent_chain_executions? @relation(fields: [chain_execution_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conversations          conversations?          @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents                 agents                  @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([agent_id, conversation_id, state_key], map: "sqlite_autoindex_agent_states_2")
+  @@index([expires_at], map: "idx_agent_states_expires_at")
+  @@index([chain_execution_id], map: "idx_agent_states_chain_execution_id")
+  @@index([conversation_id], map: "idx_agent_states_conversation_id")
+  @@index([agent_id], map: "idx_agent_states_agent_id")
+}
+
+model agent_tools {
+  id         Bytes    @id
+  agent_id   Bytes
+  tool_id    Bytes
+  config     String?
+  enabled    Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  tools      tools    @relation(fields: [tool_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents     agents   @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tool_id], map: "idx_agent_tools_tool_id")
+  @@index([agent_id], map: "idx_agent_tools_agent_id")
+}
+
+model agents {
+  id                                                      Bytes                              @id
+  name                                                    String
+  description                                             String?
+  avatar_url                                              String?
+  type                                                    Int                                @default(0)
+  status                                                  Int                                @default(0)
+  version                                                 String                             @default("1.0.0")
+  config                                                  String?
+  capabilities                                            String
+  memory_config                                           String?
+  planning_config                                         String?
+  topic_classifier                                        String?
+  routing_rules                                           String?
+  context_window                                          Int                                @default(4000)
+  tool_config                                             String?
+  metrics                                                 String?
+  personality                                             String?
+  security                                                String?
+  is_public                                               Boolean                            @default(false)
+  is_user_operator                                        Boolean                            @default(false)
+  operator_level                                          Int                                @default(0)
+  delegation_rules                                        String?
+  total_sessions                                          Int                                @default(0)
+  successful_sessions                                     Int                                @default(0)
+  average_session_time                                    Float                              @default(0)
+  last_interaction_at                                     DateTime?
+  metadata                                                String?
+  created_at                                              DateTime                           @default(now())
+  updated_at                                              DateTime                           @default(now())
+  model_id                                                Bytes?
+  participant_id                                          Bytes?
+  created_by_id                                           Bytes?
+  operator_user_id                                        Bytes?
+  parent_agent_id                                         Bytes?
+  registry_id                                             Bytes?
+  workspace_id                                            Bytes
+  agent_chain_step_executions                             agent_chain_step_executions[]
+  agent_chain_steps                                       agent_chain_steps[]
+  agent_collaboration_participants                        agent_collaboration_participants[]
+  agent_collaboration_sessions                            agent_collaboration_sessions[]
+  agent_flows                                             agent_flows[]
+  agent_models                                            agent_models[]
+  agent_operators_agent_operators_operator_idToagents     agent_operators[]                  @relation("agent_operators_operator_idToagents")
+  agent_operators_agent_operators_agent_idToagents        agent_operators[]                  @relation("agent_operators_agent_idToagents")
+  agent_performance_metrics                               agent_performance_metrics[]
+  agent_states                                            agent_states[]
+  agent_tools                                             agent_tools[]
+  agents                                                  agents?                            @relation("agentsToagents", fields: [parent_agent_id], references: [id], onUpdate: NoAction)
+  other_agents                                            agents[]                           @relation("agentsToagents")
+  users_agents_operator_user_idTousers                    users?                             @relation("agents_operator_user_idTousers", fields: [operator_user_id], references: [id], onUpdate: NoAction)
+  users_agents_created_by_idTousers                       users?                             @relation("agents_created_by_idTousers", fields: [created_by_id], references: [id], onUpdate: NoAction)
+  agent_registry                                          agent_registry?                    @relation(fields: [registry_id], references: [id], onUpdate: NoAction)
+  workspaces                                              workspaces                         @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  participants_agents_participant_idToparticipants        participants?                      @relation("agents_participant_idToparticipants", fields: [participant_id], references: [id], onUpdate: NoAction)
+  models                                                  models?                            @relation(fields: [model_id], references: [id], onUpdate: NoAction)
+  delegation_logs_delegation_logs_target_agent_idToagents delegation_logs[]                  @relation("delegation_logs_target_agent_idToagents")
+  delegation_logs_delegation_logs_operator_idToagents     delegation_logs[]                  @relation("delegation_logs_operator_idToagents")
+  participants_participants_agent_idToagents              participants[]                     @relation("participants_agent_idToagents")
+  tool_calls                                              tool_calls[]
+  topic_classification_rules                              topic_classification_rules[]
+  users_users_operator_agent_idToagents                   users?                             @relation("users_operator_agent_idToagents")
+
+  @@index([registry_id], map: "idx_agents_registry_id")
+  @@index([created_by_id], map: "idx_agents_created_by_id")
+  @@index([operator_user_id], map: "idx_agents_operator_user_id")
+  @@index([workspace_id], map: "idx_agents_workspace_id")
+  @@index([participant_id], map: "idx_agents_participant_id")
+  @@index([model_id], map: "idx_agents_model_id")
+  @@index([name], map: "idx_agents_name")
+}
+
+model api_keys {
+  id           Bytes         @id
+  account_id   Bytes
+  name         String
+  description  String
+  key_hash     String        @unique(map: "sqlite_autoindex_api_keys_3")
+  scopes       String
+  expires_at   DateTime?
+  rate_limit   Int?
+  is_active    Boolean       @default(true)
+  created_at   DateTime      @default(now())
+  updated_at   DateTime      @default(now())
+  last_used_at DateTime?
+  agent_flows  agent_flows[]
+
+  @@unique([account_id, name], map: "sqlite_autoindex_api_keys_2")
+  @@index([account_id], map: "idx_api_keys_account_id")
+}
+
+model attachments {
+  id           Bytes      @id
+  workspace_id Bytes
+  message_id   Bytes
+  file_id      Bytes
+  type         Int        @default(0)
+  url          String
+  metadata     String?
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @default(now())
+  files        files      @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  messages     messages   @relation(fields: [message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([file_id], map: "idx_attachments_file_id")
+  @@index([message_id], map: "idx_attachments_message_id")
+  @@index([workspace_id], map: "idx_attachments_workspace_id")
+}
+
+model audit_log {
+  id         Bytes    @id
+  table_name String
+  record_id  Bytes
+  operation  String
+  user_id    Bytes?
+  old_values String?
+  new_values String?
+  ip_address String?
+  user_agent String?
+  timestamp  DateTime @default(now())
+
+  @@index([user_id, timestamp(sort: Desc)], map: "idx_audit_log_user_time")
+  @@index([table_name, record_id], map: "idx_audit_log_table_record")
+}
+
+model comments {
+  id                Bytes          @id
+  workspace_id      Bytes
+  message_id        Bytes?
+  parent_comment_id Bytes?
+  conversation_id   Bytes?
+  task_id           Bytes?
+  event_id          Bytes?
+  type              Int            @default(0)
+  content           String
+  metadata          String?
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @default(now())
+  events            events?        @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks             tasks?         @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conversations     conversations? @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  comments          comments?      @relation("commentsTocomments", fields: [parent_comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_comments    comments[]     @relation("commentsTocomments")
+  messages          messages?      @relation(fields: [message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces        workspaces     @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([updated_at], map: "idx_comments_updated_at")
+  @@index([created_at], map: "idx_comments_created_at")
+  @@index([event_id], map: "idx_comments_event_id")
+  @@index([task_id], map: "idx_comments_task_id")
+  @@index([conversation_id], map: "idx_comments_conversation_id")
+  @@index([parent_comment_id], map: "idx_comments_parent_comment_id")
+  @@index([message_id], map: "idx_comments_message_id")
+  @@index([workspace_id], map: "idx_comments_workspace_id")
+}
+
+model concept_relationships {
+  id                                               Bytes    @id
+  from_id                                          Bytes
+  to_id                                            Bytes
+  relation_type                                    Int      @default(0)
+  weight                                           Float    @default(1.0)
+  concepts_concept_relationships_to_idToconcepts   concepts @relation("concept_relationships_to_idToconcepts", fields: [to_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  concepts_concept_relationships_from_idToconcepts concepts @relation("concept_relationships_from_idToconcepts", fields: [from_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([from_id, to_id, relation_type], map: "sqlite_autoindex_concept_relationships_2")
+}
+
+model concepts {
+  id                                                            Bytes                   @id
+  name                                                          String
+  description                                                   String?
+  metadata                                                      String?
+  concept_relationships_concept_relationships_to_idToconcepts   concept_relationships[] @relation("concept_relationships_to_idToconcepts")
+  concept_relationships_concept_relationships_from_idToconcepts concept_relationships[] @relation("concept_relationships_from_idToconcepts")
+  memory_items                                                  memory_items[]
+}
+
+model contacts {
+  id                                               Bytes          @id
+  workspace_id                                     Bytes
+  user_id                                          Bytes?
+  name                                             String
+  first_name                                       String?
+  last_name                                        String?
+  mobile_phone                                     String?
+  home_phone                                       String?
+  work_phone                                       String?
+  email                                            String?
+  website                                          String?
+  job_title                                        String?
+  company                                          String?
+  department                                       String?
+  primary_address_id                               Bytes?
+  metadata                                         String?
+  created_at                                       DateTime       @default(now())
+  updated_at                                       DateTime       @default(now())
+  addresses_addresses_contact_idTocontacts         addresses[]    @relation("addresses_contact_idTocontacts")
+  addresses_contacts_primary_address_idToaddresses addresses?     @relation("contacts_primary_address_idToaddresses", fields: [primary_address_id], references: [id], onUpdate: NoAction)
+  users_contacts_user_idTousers                    users?         @relation("contacts_user_idTousers", fields: [user_id], references: [id], onUpdate: NoAction)
+  workspaces                                       workspaces     @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  participants                                     participants[]
+  users_users_contact_idTocontacts                 users[]        @relation("users_contact_idTocontacts")
+
+  @@index([last_name], map: "idx_contacts_last_name")
+  @@index([first_name], map: "idx_contacts_first_name")
+  @@index([name], map: "idx_contacts_name")
+  @@index([workspace_id], map: "idx_contacts_workspace_id")
+}
+
+model contexts {
+  id              Bytes         @id
+  workspace_id    Bytes
+  conversation_id Bytes
+  name            String
+  type            Int           @default(0)
+  metadata        String?
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @default(now())
+  conversations   conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces      workspaces    @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([type], map: "idx_contexts_type")
+  @@index([conversation_id], map: "idx_contexts_conversation_id")
+  @@index([workspace_id], map: "idx_contexts_workspace_id")
+}
+
+model conversation_participants {
+  conversation_id Bytes
+  participant_id  Bytes
+  role            Int           @default(0)
+  joined_at       DateTime      @default(now())
+  left_at         DateTime?
+  is_active       Boolean       @default(true)
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @default(now())
+  participants    participants  @relation(fields: [participant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conversations   conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([conversation_id, participant_id])
+  @@index([role], map: "idx_conversation_participants_role")
+  @@index([participant_id], map: "idx_conversation_participants_participant_id")
+  @@index([conversation_id], map: "idx_conversation_participants_conversation_id")
+}
+
+model conversations {
+  id                                                      Bytes                       @id
+  title                                                   String
+  type                                                    Int                         @default(0)
+  status                                                  Int                         @default(0)
+  parent_conversation_id                                  Bytes?
+  metadata                                                String?
+  last_message_at                                         DateTime?
+  archived                                                Boolean                     @default(false)
+  custom_settings                                         String?
+  created_at                                              DateTime                    @default(now())
+  updated_at                                              DateTime                    @default(now())
+  agent_chain_executions                                  agent_chain_executions[]
+  agent_performance_metrics                               agent_performance_metrics[]
+  agent_states                                            agent_states[]
+  comments                                                comments[]
+  contexts                                                contexts[]
+  conversation_participants                               conversation_participants[]
+  conversations                                           conversations?              @relation("conversationsToconversations", fields: [parent_conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_conversations                                     conversations[]             @relation("conversationsToconversations")
+  memory_items                                            memory_items[]
+  messages_messages_branch_conversation_idToconversations messages[]                  @relation("messages_branch_conversation_idToconversations")
+  messages_messages_conversation_idToconversations        messages[]                  @relation("messages_conversation_idToconversations")
+  p2p_message_queue                                       p2p_message_queue[]
+  tasks                                                   tasks[]
+  tool_calls                                              tool_calls[]
+
+  @@index([created_at], map: "idx_conversations_created_at")
+  @@index([last_message_at], map: "idx_conversations_last_message_at")
+  @@index([title], map: "idx_conversations_title")
+}
+
+model credentials {
+  id              Bytes      @id
+  workspace_id    Bytes
+  name            String
+  credential_name String
+  encrypted_value String
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @default(now())
+  workspaces      workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workspace_id], map: "idx_credentials_workspace_id")
+}
+
+model delegation_logs {
+  id                                             Bytes    @id
+  operator_id                                    Bytes
+  target_agent_id                                Bytes?
+  user_id                                        Bytes?
+  task                                           String
+  topic                                          String?
+  confidence                                     Float?
+  success                                        Boolean  @default(false)
+  duration                                       Int?
+  error_message                                  String?
+  metadata                                       String?
+  created_at                                     DateTime @default(now())
+  users                                          users?   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents_delegation_logs_target_agent_idToagents agents?  @relation("delegation_logs_target_agent_idToagents", fields: [target_agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents_delegation_logs_operator_idToagents     agents   @relation("delegation_logs_operator_idToagents", fields: [operator_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_delegation_logs_user_id")
+  @@index([target_agent_id], map: "idx_delegation_logs_target_agent_id")
+  @@index([operator_id], map: "idx_delegation_logs_operator_id")
+}
+
+model document_chunks {
+  id                    Bytes             @id
+  workspace_id          Bytes
+  document_id           Bytes
+  parent_chunk_id       Bytes?
+  content               String
+  content_hash          String
+  chunk_type            Int               @default(0)
+  order_index           Int
+  start_offset          Int
+  end_offset            Int
+  token_count           Int?
+  embedding_id          Bytes?
+  overlap_start         Int?              @default(0)
+  overlap_end           Int?              @default(0)
+  semantic_level        Int?              @default(0)
+  metadata              String?
+  created_at            DateTime          @default(now())
+  updated_at            DateTime          @default(now())
+  memory_vectors        memory_vectors?   @relation(fields: [embedding_id], references: [id], onUpdate: NoAction)
+  document_chunks       document_chunks?  @relation("document_chunksTodocument_chunks", fields: [parent_chunk_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_document_chunks document_chunks[] @relation("document_chunksTodocument_chunks")
+  documents             documents         @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces            workspaces        @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workspace_id], map: "idx_document_chunks_workspace_id")
+  @@index([content_hash], map: "idx_document_chunks_hash")
+  @@index([document_id, semantic_level, order_index], map: "idx_document_chunks_semantic")
+  @@index([document_id, order_index], map: "idx_document_chunks_order")
+}
+
+model documents {
+  id              Bytes             @id
+  workspace_id    Bytes
+  owner_id        Bytes
+  name            String
+  description     String?
+  document_type   Int               @default(0)
+  mime_type       String
+  size_bytes      Int               @default(0)
+  content         String?
+  metadata        String
+  file_path       String?
+  url             String?
+  hash            String?
+  is_indexed      Boolean           @default(false)
+  is_embedded     Boolean           @default(false)
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @default(now())
+  document_chunks document_chunks[]
+  tasks           tasks[]
+
+  @@index([owner_id], map: "idx_documents_owner_id")
+  @@index([document_type], map: "idx_documents_document_type")
+  @@index([workspace_id], map: "idx_documents_workspace_id")
+}
+
+model episodes {
+  id                                            Bytes         @id
+  user_id                                       Bytes?
+  agent_id                                      Bytes?
+  event_type                                    Int           @default(0)
+  content                                       String
+  summary                                       String?
+  emotional_valence                             Float         @default(0.0)
+  emotional_arousal                             Float         @default(0.0)
+  emotional_attention                           Float         @default(0.0)
+  importance                                    Float         @default(0.5)
+  confidence                                    Float         @default(1.0)
+  timestamp                                     DateTime      @default(now())
+  duration                                      Int           @default(0)
+  location                                      String?
+  device                                        String?
+  time_of_day                                   String?
+  source_id                                     Bytes?
+  source_type                                   String?
+  source_confidence                             Float         @default(1.0)
+  metadata                                      String?
+  workspace_id                                  Bytes?
+  participants_episodes_agent_idToparticipants  participants? @relation("episodes_agent_idToparticipants", fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  participants_episodes_user_idToparticipants   participants? @relation("episodes_user_idToparticipants", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  participants_episodes_source_idToparticipants participants? @relation("episodes_source_idToparticipants", fields: [source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces                                    workspaces?   @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([agent_id], map: "idx_episodes_agent_id")
+  @@index([user_id], map: "idx_episodes_user_id")
+  @@index([source_id], map: "idx_episodes_source_id")
+  @@index([workspace_id], map: "idx_episodes_workspace_id")
+}
+
+model event_participants {
+  id                       Bytes         @id
+  event_id                 Bytes
+  participant_id           Bytes?
+  email                    String?
+  role                     Int           @default(0)
+  status                   Int           @default(0)
+  response_at              DateTime?
+  agent_role               String?
+  agent_config             String?
+  notification_preferences String?
+  joined_at                DateTime?
+  left_at                  DateTime?
+  is_present               Boolean       @default(false)
+  is_muted                 Boolean       @default(false)
+  is_video_on              Boolean       @default(false)
+  speaking_time            Int?
+  metadata                 String?
+  created_at               DateTime      @default(now())
+  updated_at               DateTime      @default(now())
+  participants             participants? @relation(fields: [participant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  events                   events        @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([event_id], map: "idx_event_participants_event_id")
+}
+
+model event_relations {
+  id                                                    Bytes     @id
+  event_id                                              Bytes?
+  status                                                Int       @default(0)
+  responded_date                                        DateTime?
+  response                                              String?
+  created_at                                            DateTime?
+  created_by_user_id                                    Bytes?
+  is_deleted                                            Boolean   @default(false)
+  related_user_id                                       Bytes?
+  last_modified_date                                    DateTime?
+  last_modified_by_user_id                              Bytes?
+  users_event_relations_last_modified_by_user_idTousers users?    @relation("event_relations_last_modified_by_user_idTousers", fields: [last_modified_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_event_relations_created_by_user_idTousers       users?    @relation("event_relations_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_event_relations_related_user_idTousers          users?    @relation("event_relations_related_user_idTousers", fields: [related_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  events                                                events?   @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([last_modified_by_user_id], map: "idx_event_relations_last_modified_by_id")
+  @@index([created_by_user_id], map: "idx_event_relations_created_by_id")
+  @@index([related_user_id], map: "idx_event_relations_related_user_id")
+  @@index([event_id], map: "idx_event_relations_event_id")
+}
+
+model events {
+  id                                           Bytes                @id
+  title                                        String
+  description                                  String?
+  type                                         Int                  @default(0)
+  status                                       Int                  @default(0)
+  start_time                                   DateTime
+  end_time                                     DateTime
+  is_all_day_event                             Boolean              @default(false)
+  timezone_sid_key                             String?              @default("UTC")
+  location                                     String?
+  virtual_meeting_url                          String?
+  meeting_platform                             String?
+  is_recurrence                                Boolean              @default(false)
+  recurrence_rule                              String?
+  recurrence_parent_id                         Bytes?
+  agent_participation                          String?
+  requires_transcription                       Boolean              @default(false)
+  requires_summarization                       Boolean              @default(false)
+  agent_capabilities                           String?
+  is_private                                   Boolean              @default(false)
+  allow_guests                                 Boolean              @default(false)
+  max_attendees                                Int?
+  requires_approval                            Boolean              @default(false)
+  agenda                                       String?
+  meeting_notes                                String?
+  transcription                                String?
+  summary                                      String?
+  action_items                                 String?
+  is_child_event                               Boolean              @default(false)
+  is_group_event                               Boolean              @default(false)
+  is_archived                                  Boolean              @default(false)
+  event_relation                               String?
+  activity_date                                DateTime?
+  duration_in_minutes                          Int?
+  show_as                                      String?
+  is_reminder_set                              Boolean              @default(false)
+  reminder_date_time                           DateTime
+  metadata                                     String?
+  created_at                                   DateTime             @default(now())
+  updated_at                                   DateTime             @default(now())
+  plan_id                                      Bytes?
+  task_id                                      Bytes?
+  created_by_user_id                           Bytes?
+  last_modified_by_user_id                     Bytes?
+  workspace_id                                 Bytes?
+  parent_event_id                              Bytes?
+  comments                                     comments[]
+  event_participants                           event_participants[]
+  event_relations                              event_relations[]
+  tasks                                        tasks?               @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plans                                        plans?               @relation(fields: [plan_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  events                                       events?              @relation("eventsToevents", fields: [parent_event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_events                                 events[]             @relation("eventsToevents")
+  users_events_last_modified_by_user_idTousers users?               @relation("events_last_modified_by_user_idTousers", fields: [last_modified_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_events_created_by_user_idTousers       users?               @relation("events_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces                                   workspaces?          @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  notes                                        notes[]
+  notifications                                notifications[]
+
+  @@index([updated_at], map: "idx_events_updated_at")
+  @@index([created_at], map: "idx_events_created_at")
+  @@index([workspace_id], map: "idx_events_workspace_id")
+}
+
+model files {
+  id          Bytes         @id
+  title       String
+  content     String
+  type_       Int           @default(0)
+  metadata    String
+  created_at  DateTime      @default(now())
+  updated_at  DateTime      @default(now())
+  attachments attachments[]
+  tasks       tasks[]
+
+  @@index([type_], map: "idx_files_type")
+}
+
+model group_members {
+  group_id       Bytes
+  participant_id Bytes
+  participants   participants @relation(fields: [participant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  groups         groups       @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([group_id, participant_id])
+}
+
+model groups {
+  id              Bytes           @id
+  name            String
+  description     String?
+  avatar          String?
+  type            Int             @default(0)
+  status          Int             @default(0)
+  metadata        String?
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @default(now())
+  workspace_id    Bytes
+  parent_group_id Bytes?
+  group_members   group_members[]
+  workspaces      workspaces      @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  groups          groups?         @relation("groupsTogroups", fields: [parent_group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_groups    groups[]        @relation("groupsTogroups")
+
+  @@index([status], map: "idx_groups_status")
+  @@index([type], map: "idx_groups_type")
+  @@index([workspace_id], map: "idx_groups_workspace_id")
+}
+
+model intentions {
+  id           Bytes          @id
+  description  String?
+  trigger_time DateTime       @default(now())
+  status       Int            @default(0)
+  created_at   DateTime       @default(now())
+  completed_at DateTime?
+  user_id      Bytes
+  users        users          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  memory_items memory_items[]
+}
+
+model mcp_servers {
+  id            Bytes       @id
+  workspace_id  Bytes
+  name          String
+  type          String
+  status        Int
+  url           String
+  capabilities  String?
+  metrics       String?
+  configuration String?
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @default(now())
+  workspaces    workspaces  @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  mcp_tools     mcp_tools[]
+
+  @@index([type], map: "idx_mcp_servers_type")
+  @@index([status], map: "idx_mcp_servers_status")
+  @@index([workspace_id], map: "idx_mcp_servers_workspace_id")
+}
+
+model mcp_tools {
+  id            Bytes       @id
+  mcp_server_id Bytes
+  name          String
+  description   String?
+  is_enabled    Boolean     @default(false)
+  type          String
+  status        Int         @default(0)
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @default(now())
+  mcp_servers   mcp_servers @relation(fields: [mcp_server_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model memory_contexts {
+  id           Bytes          @id
+  timestamp    DateTime       @default(now())
+  device       String?
+  location     String?
+  environment  String?
+  memory_items memory_items[]
+}
+
+model memory_items {
+  id                Bytes            @id
+  workspace_id      Bytes
+  participant_id    Bytes?
+  conversation_id   Bytes?
+  memory_type       Int              @default(0)
+  payload           String
+  priority          Float            @default(0.5)
+  confidence_score  Float            @default(1.0)
+  emotional_valence Float            @default(0.0)
+  emotional_arousal Float            @default(0.0)
+  last_accessed_at  DateTime         @default(now())
+  metadata          String?
+  created_at        DateTime         @default(now())
+  updated_at        DateTime         @default(now())
+  memory_source_id  Bytes?
+  memory_context_id Bytes?
+  memory_session_id Bytes?
+  intention_id      Bytes?
+  concept_id        Bytes?
+  concepts          concepts?        @relation(fields: [concept_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  intentions        intentions?      @relation(fields: [intention_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  memory_sessions   memory_sessions? @relation(fields: [memory_session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  memory_contexts   memory_contexts? @relation(fields: [memory_context_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  memory_sources    memory_sources?  @relation(fields: [memory_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  participants      participants?    @relation(fields: [participant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conversations     conversations?   @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces        workspaces       @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  memory_vectors    memory_vectors[]
+  tasks             tasks[]
+
+  @@index([memory_type], map: "idx_memory_items_type")
+  @@index([conversation_id], map: "idx_memory_items_conversation_id")
+  @@index([participant_id], map: "idx_memory_items_participant_id")
+  @@index([workspace_id], map: "idx_memory_items_workspace_id")
+}
+
+model memory_sessions {
+  id           Bytes          @id
+  start_time   DateTime       @default(now())
+  end_time     DateTime?
+  objective    String?
+  metadata     String?
+  memory_items memory_items[]
+}
+
+model memory_sources {
+  id           Bytes          @id
+  type         Int            @default(0)
+  identifier   String
+  description  String?
+  user_id      Bytes?
+  memories     String?
+  memory_items memory_items[]
+  users        users?         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model memory_vectors {
+  id              Bytes             @id
+  memory_item_id  Bytes
+  vector          String
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @default(now())
+  document_chunks document_chunks[]
+  memory_items    memory_items      @relation(fields: [memory_item_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([memory_item_id], map: "idx_memory_vectors_memory_item_id")
+}
+
+model messages {
+  id                                                           Bytes          @id
+  conversation_id                                              Bytes
+  workspace_id                                                 Bytes
+  sender_id                                                    Bytes
+  parent_id                                                    Bytes?
+  type                                                         Int            @default(0)
+  content                                                      String
+  status                                                       Int            @default(0)
+  refs                                                         String?
+  related_episode_id                                           Bytes?
+  branch_conversation_id                                       Bytes?
+  metadata                                                     String?
+  reply_to_id                                                  Bytes?
+  created_at                                                   DateTime       @default(now())
+  updated_at                                                   DateTime       @default(now())
+  attachments                                                  attachments[]
+  comments                                                     comments[]
+  messages_messages_parent_idTomessages                        messages?      @relation("messages_parent_idTomessages", fields: [parent_id], references: [id], onUpdate: NoAction)
+  other_messages_messages_parent_idTomessages                  messages[]     @relation("messages_parent_idTomessages")
+  conversations_messages_branch_conversation_idToconversations conversations? @relation("messages_branch_conversation_idToconversations", fields: [branch_conversation_id], references: [id], onUpdate: NoAction)
+  messages_messages_reply_to_idTomessages                      messages?      @relation("messages_reply_to_idTomessages", fields: [reply_to_id], references: [id], onUpdate: NoAction)
+  other_messages_messages_reply_to_idTomessages                messages[]     @relation("messages_reply_to_idTomessages")
+  participants                                                 participants   @relation(fields: [sender_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  workspaces                                                   workspaces     @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conversations_messages_conversation_idToconversations        conversations  @relation("messages_conversation_idToconversations", fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tool_calls                                                   tool_calls[]
+}
+
+model model_registry {
+  id           Bytes      @id
+  workspace_id Bytes
+  name         String
+  description  String?
+  version      String
+  config       String?
+  is_public    Boolean    @default(false)
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @default(now())
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  models       models[]
+
+  @@index([workspace_id], map: "idx_model_registry_workspace_id")
+}
+
+model models {
+  id                 Bytes           @id
+  provider_id        Bytes
+  registry_id        Bytes?
+  name               String
+  description        String?
+  version            String
+  model_type         Int             @default(0)
+  context_size       Int             @default(0)
+  max_tokens         Int             @default(0)
+  supports_functions Boolean         @default(false)
+  supports_vision    Boolean         @default(false)
+  supports_streaming Boolean         @default(false)
+  input_cost_per_1k  Float?
+  output_cost_per_1k Float?
+  config             String?
+  capabilities       String
+  tags               String
+  is_deprecated      Boolean         @default(false)
+  is_active          Boolean         @default(true)
+  created_at         DateTime        @default(now())
+  updated_at         DateTime        @default(now())
+  agent_models       agent_models[]
+  agents             agents[]
+  model_registry     model_registry? @relation(fields: [registry_id], references: [id], onUpdate: NoAction)
+  providers          providers       @relation(fields: [provider_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([is_active], map: "idx_models_is_active")
+  @@index([registry_id], map: "idx_models_registry_id")
+  @@index([provider_id], map: "idx_models_provider_id")
+}
+
+model notes {
+  id             Bytes      @id
+  workspace_id   Bytes
+  parent_note_id Bytes?
+  task_id        Bytes?
+  event_id       Bytes?
+  type           Int        @default(0)
+  title          String
+  content        String
+  metadata       String?
+  created_at     DateTime   @default(now())
+  updated_at     DateTime   @default(now())
+  events         events?    @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks          tasks?     @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  notes          notes?     @relation("notesTonotes", fields: [parent_note_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_notes    notes[]    @relation("notesTonotes")
+  workspaces     workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([event_id], map: "idx_notes_event_id")
+  @@index([task_id], map: "idx_notes_task_id")
+  @@index([parent_note_id], map: "idx_notes_parent_note_id")
+  @@index([workspace_id], map: "idx_notes_workspace_id")
+}
+
+model notifications {
+  id           Bytes        @id
+  recipient_id Bytes
+  message      String
+  is_read      Boolean      @default(false)
+  created_at   DateTime     @default(now())
+  updated_at   DateTime     @default(now())
+  task_id      Bytes?
+  event_id     Bytes?
+  agent_id     Bytes?
+  events       events?      @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks        tasks?       @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  participants participants @relation(fields: [recipient_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([recipient_id], map: "idx_notifications_recipient_id")
+}
+
+model p2p_message_queue {
+  id                       Bytes                   @id
+  from_peer_id             String
+  to_peer_id               String
+  message_type             Int                     @default(0)
+  priority                 Int                     @default(0)
+  payload                  String
+  conversation_id          Bytes?
+  agent_chain_execution_id Bytes?
+  status                   Int                     @default(0)
+  retry_count              Int?                    @default(0)
+  max_retries              Int?                    @default(3)
+  expires_at               DateTime?
+  sent_at                  DateTime?
+  delivered_at             DateTime?
+  error_details            String?
+  created_at               DateTime                @default(now())
+  agent_chain_executions   agent_chain_executions? @relation(fields: [agent_chain_execution_id], references: [id], onUpdate: NoAction)
+  conversations            conversations?          @relation(fields: [conversation_id], references: [id], onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_p2p_message_queue_created_at")
+  @@index([priority(sort: Desc)], map: "idx_p2p_message_queue_priority")
+  @@index([status], map: "idx_p2p_message_queue_status")
+  @@index([to_peer_id], map: "idx_p2p_message_queue_to_peer")
+}
+
+model p2p_nodes {
+  id                 Bytes    @id
+  peer_id            String   @unique(map: "sqlite_autoindex_p2p_nodes_2")
+  node_type          Int      @default(0)
+  multiaddr          String
+  public_key         String?
+  capabilities       String?
+  status             Int      @default(0)
+  last_seen          DateTime @default(now())
+  connection_quality Float?   @default(1.0)
+  latency_ms         Int?
+  metadata           String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @default(now())
+
+  @@index([last_seen], map: "idx_p2p_nodes_last_seen")
+  @@index([status], map: "idx_p2p_nodes_status")
+  @@index([peer_id], map: "idx_p2p_nodes_peer_id")
+}
+
+model participants {
+  id                                            Bytes                       @id
+  workspace_id                                  Bytes
+  user_id                                       Bytes?
+  agent_id                                      Bytes?
+  contact_id                                    Bytes?
+  name                                          String
+  description                                   String?
+  avatar                                        String?
+  status                                        Int                         @default(0)
+  metadata                                      String?
+  created_at                                    DateTime                    @default(now())
+  updated_at                                    DateTime                    @default(now())
+  agent_chain_executions                        agent_chain_executions[]
+  agents_agents_participant_idToparticipants    agents[]                    @relation("agents_participant_idToparticipants")
+  conversation_participants                     conversation_participants[]
+  episodes_episodes_agent_idToparticipants      episodes[]                  @relation("episodes_agent_idToparticipants")
+  episodes_episodes_user_idToparticipants       episodes[]                  @relation("episodes_user_idToparticipants")
+  episodes_episodes_source_idToparticipants     episodes[]                  @relation("episodes_source_idToparticipants")
+  event_participants                            event_participants[]
+  group_members                                 group_members[]
+  memory_items                                  memory_items[]
+  messages                                      messages[]
+  notifications                                 notifications[]
+  contacts                                      contacts?                   @relation(fields: [contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents_participants_agent_idToagents          agents?                     @relation("participants_agent_idToagents", fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                                         users?                      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces                                    workspaces                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plans                                         plans[]
+  task_assignees                                task_assignees[]
+  tasks_tasks_primary_assignee_idToparticipants tasks[]                     @relation("tasks_primary_assignee_idToparticipants")
+  tasks_tasks_created_by_idToparticipants       tasks[]                     @relation("tasks_created_by_idToparticipants")
+
+  @@unique([workspace_id, contact_id], map: "sqlite_autoindex_participants_4")
+  @@unique([workspace_id, agent_id], map: "sqlite_autoindex_participants_3")
+  @@unique([workspace_id, user_id], map: "sqlite_autoindex_participants_2")
+  @@index([contact_id], map: "idx_participants_contact_id")
+  @@index([agent_id], map: "idx_participants_agent_id")
+  @@index([user_id], map: "idx_participants_user_id")
+  @@index([name], map: "idx_participants_name")
+  @@index([workspace_id], map: "idx_participants_workspace_id")
+}
+
+model plans {
+  id             Bytes        @id
+  participant_id Bytes
+  plan_type      Int
+  plan_status    Int
+  plan_metadata  String?
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @default(now())
+  events         events[]
+  participants   participants @relation(fields: [participant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks          tasks[]
+
+  @@index([plan_status], map: "idx_plans_plan_status")
+  @@index([plan_type], map: "idx_plans_plan_type")
+  @@index([participant_id], map: "idx_plans_participant_id")
+}
+
+model procedures {
+  id                                                             Bytes              @id
+  name                                                           String
+  description                                                    String?
+  execution_count                                                Int                @default(0)
+  created_at                                                     DateTime           @default(now())
+  updated_at                                                     DateTime           @default(now())
+  procedures_steps_procedures_steps_sub_procedure_idToprocedures procedures_steps[] @relation("procedures_steps_sub_procedure_idToprocedures")
+  procedures_steps_procedures_steps_procedure_idToprocedures     procedures_steps[] @relation("procedures_steps_procedure_idToprocedures")
+
+  @@index([description], map: "idx_procedures_description")
+  @@index([name], map: "idx_procedures_name")
+}
+
+model procedures_steps {
+  id                                                       Bytes       @id
+  procedure_id                                             Bytes
+  step_number                                              Int
+  instruction                                              String
+  step_type                                                String
+  sub_procedure_id                                         Bytes?
+  created_at                                               DateTime    @default(now())
+  procedures_procedures_steps_sub_procedure_idToprocedures procedures? @relation("procedures_steps_sub_procedure_idToprocedures", fields: [sub_procedure_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  procedures_procedures_steps_procedure_idToprocedures     procedures  @relation("procedures_steps_procedure_idToprocedures", fields: [procedure_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([step_number], map: "idx_procedures_steps_step_number")
+  @@index([procedure_id], map: "idx_procedures_steps_procedure_id")
+}
+
+model prompts {
+  id            Bytes      @id
+  workspace_id  Bytes
+  title         String
+  description   String?
+  content       String
+  type          Int        @default(0)
+  status        Int        @default(0)
+  template      String
+  variables     String?
+  metadata      String?
+  tags          String
+  created_by_id Bytes?
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @default(now())
+  workspaces    workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users         users?     @relation(fields: [created_by_id], references: [id], onUpdate: NoAction)
+
+  @@index([created_by_id], map: "idx_prompts_created_by_id")
+  @@index([title], map: "idx_prompts_title")
+  @@index([workspace_id], map: "idx_prompts_workspace_id")
+}
+
+model providers {
+  id          Bytes    @id
+  name        String
+  description String?
+  type        String
+  config      String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+  models      models[]
+
+  @@index([type], map: "idx_providers_type")
+  @@index([name], map: "idx_providers_name")
+}
+
+model task_assignees {
+  id             Bytes        @id
+  workspace_id   Bytes
+  task_id        Bytes
+  participant_id Bytes
+  role           String
+  status         String
+  metadata       String?
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @default(now())
+  participants   participants @relation(fields: [participant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tasks          tasks        @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([participant_id], map: "idx_task_assignees_participant_id")
+  @@index([task_id], map: "idx_task_assignees_task_id")
+}
+
+model tasks {
+  id                                                   Bytes            @id
+  plan_id                                              Bytes
+  participant_id                                       Bytes
+  workspace_id                                         Bytes
+  title                                                String
+  description                                          String?
+  start_time                                           DateTime
+  end_time                                             DateTime?
+  due_date                                             DateTime?
+  priority                                             Int              @default(0)
+  urgency                                              Int              @default(0)
+  importance                                           Int              @default(0)
+  status                                               Int              @default(0)
+  metadata                                             String?
+  conversation_id                                      Bytes?
+  memory_id                                            Bytes?
+  memory_type                                          String
+  document_id                                          Bytes?
+  file_id                                              Bytes?
+  url                                                  String?
+  primary_assignee_id                                  Bytes?
+  created_by_id                                        Bytes
+  created_at                                           DateTime         @default(now())
+  updated_at                                           DateTime         @default(now())
+  comments                                             comments[]
+  events                                               events[]
+  notes                                                notes[]
+  notifications                                        notifications[]
+  task_assignees                                       task_assignees[]
+  files                                                files?           @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  documents                                            documents?       @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  memory_items                                         memory_items?    @relation(fields: [memory_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conversations                                        conversations?   @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  participants_tasks_primary_assignee_idToparticipants participants?    @relation("tasks_primary_assignee_idToparticipants", fields: [primary_assignee_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  participants_tasks_created_by_idToparticipants       participants     @relation("tasks_created_by_idToparticipants", fields: [created_by_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plans                                                plans            @relation(fields: [plan_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([document_id], map: "idx_tasks_document_id")
+  @@index([memory_id], map: "idx_tasks_memory_id")
+  @@index([conversation_id], map: "idx_tasks_conversation_id")
+  @@index([plan_id], map: "idx_tasks_plan_id")
+}
+
+model tool_calls {
+  id                          Bytes                        @id
+  agent_id                    Bytes
+  tool_id                     Bytes
+  conversation_id             Bytes?
+  message_id                  Bytes?
+  chain_execution_id          Bytes?
+  step_execution_id           Bytes?
+  call_sequence               Int?                         @default(0)
+  parameters                  String
+  result                      String?
+  error_details               String?
+  status                      Int                          @default(0)
+  started_at                  DateTime?
+  completed_at                DateTime?
+  duration_ms                 Int?
+  created_at                  DateTime                     @default(now())
+  updated_at                  DateTime                     @default(now())
+  workspace_id                Bytes?
+  agent_chain_step_executions agent_chain_step_executions? @relation(fields: [step_execution_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agent_chain_executions      agent_chain_executions?      @relation(fields: [chain_execution_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  messages                    messages?                    @relation(fields: [message_id], references: [id], onUpdate: NoAction)
+  conversations               conversations?               @relation(fields: [conversation_id], references: [id], onUpdate: NoAction)
+  tools                       tools                        @relation(fields: [tool_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents                      agents                       @relation(fields: [agent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces                  workspaces?                  @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
+
+  @@index([chain_execution_id], map: "idx_tool_calls_chain_execution_id")
+  @@index([conversation_id], map: "idx_tool_calls_conversation_id")
+  @@index([tool_id], map: "idx_tool_calls_tool_id")
+  @@index([workspace_id], map: "idx_tool_calls_workspace_id")
+  @@index([agent_id], map: "idx_tool_calls_agent_id")
+}
+
+model tool_registry {
+  id           Bytes       @id
+  name         String
+  description  String?
+  version      String
+  category     Int         @default(0)
+  type         Int         @default(0)
+  definition   String
+  config       String
+  examples     String
+  tags         String
+  is_public    Boolean     @default(false)
+  is_official  Boolean     @default(false)
+  downloads    Int         @default(0)
+  rating       Float?
+  status       Int         @default(0)
+  created_at   DateTime    @default(now())
+  updated_at   DateTime    @default(now())
+  workspace_id Bytes?
+  workspaces   workspaces? @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
+  tools        tools[]
+
+  @@index([workspace_id], map: "idx_tool_registry_workspace_id")
+  @@index([name], map: "idx_tool_registry_name")
+}
+
+model tools {
+  id            Bytes          @id
+  name          String
+  description   String?
+  tool_type     Int            @default(0)
+  category      Int            @default(0)
+  definition    String?
+  config        String?
+  examples      String?
+  tags          String
+  rating        Float?
+  status        Int            @default(0)
+  created_by_id Bytes?
+  registry_id   Bytes?
+  metadata      String?
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @default(now())
+  workspace_id  Bytes?
+  agent_tools   agent_tools[]
+  tool_calls    tool_calls[]
+  tool_registry tool_registry? @relation(fields: [registry_id], references: [id], onUpdate: NoAction)
+  workspaces    workspaces?    @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workspace_id], map: "idx_tools_workspace_id")
+  @@index([registry_id], map: "idx_tools_registry_id")
+  @@index([created_by_id], map: "idx_tools_created_by_id")
+}
+
+model topic_classification_rules {
+  id            Bytes    @id
+  operator_id   Bytes
+  name          String
+  topic         String
+  keywords      String
+  patterns      String?
+  target_agents String
+  priority      Int      @default(0)
+  confidence    Float    @default(0.7)
+  is_active     Boolean  @default(true)
+  metadata      String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now())
+  agents        agents   @relation(fields: [operator_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([operator_id], map: "idx_topic_classification_rules_operator_id")
+}
+
+model users {
+  id                                                              Bytes             @id
+  contact_id                                                      Bytes?
+  email                                                           String?           @unique(map: "sqlite_autoindex_users_2")
+  username                                                        String?           @unique(map: "sqlite_autoindex_users_3")
+  operator_agent_id                                               Bytes?            @unique(map: "sqlite_autoindex_users_4")
+  display_name                                                    String
+  first_name                                                      String?
+  last_name                                                       String?
+  mobile_phone                                                    String?
+  avatar                                                          String?
+  bio                                                             String?
+  status                                                          Int               @default(0)
+  email_verified                                                  Boolean           @default(false)
+  phone_verified                                                  Boolean           @default(false)
+  last_seen                                                       DateTime          @default(now())
+  roles                                                           String
+  preferences                                                     String
+  metadata                                                        String?
+  created_at                                                      DateTime          @default(now())
+  updated_at                                                      DateTime          @default(now())
+  workspace_id                                                    Bytes
+  addresses                                                       addresses[]
+  agent_chains                                                    agent_chains[]
+  agents_agents_operator_user_idTousers                           agents[]          @relation("agents_operator_user_idTousers")
+  agents_agents_created_by_idTousers                              agents[]          @relation("agents_created_by_idTousers")
+  contacts_contacts_user_idTousers                                contacts[]        @relation("contacts_user_idTousers")
+  delegation_logs                                                 delegation_logs[]
+  event_relations_event_relations_last_modified_by_user_idTousers event_relations[] @relation("event_relations_last_modified_by_user_idTousers")
+  event_relations_event_relations_created_by_user_idTousers       event_relations[] @relation("event_relations_created_by_user_idTousers")
+  event_relations_event_relations_related_user_idTousers          event_relations[] @relation("event_relations_related_user_idTousers")
+  events_events_last_modified_by_user_idTousers                   events[]          @relation("events_last_modified_by_user_idTousers")
+  events_events_created_by_user_idTousers                         events[]          @relation("events_created_by_user_idTousers")
+  intentions                                                      intentions[]
+  memory_sources                                                  memory_sources[]
+  participants                                                    participants[]
+  prompts                                                         prompts[]
+  contacts_users_contact_idTocontacts                             contacts?         @relation("users_contact_idTocontacts", fields: [contact_id], references: [id], onUpdate: NoAction)
+  agents_users_operator_agent_idToagents                          agents?           @relation("users_operator_agent_idToagents", fields: [operator_agent_id], references: [id], onUpdate: NoAction)
+  workspaces                                                      workspaces        @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([operator_agent_id], map: "idx_users_operator_agent_id")
+  @@index([contact_id], map: "idx_users_contact_id")
+  @@index([username], map: "idx_users_username")
+  @@index([email], map: "idx_users_email")
+}
+
+model workspaces {
+  id                           Bytes                          @id
+  name                         String
+  description                  String?
+  type                         Int                            @default(0)
+  status                       Int                            @default(0)
+  metadata                     String?
+  created_at                   DateTime                       @default(now())
+  updated_at                   DateTime                       @default(now())
+  accounts                     accounts[]
+  agent_chains                 agent_chains[]
+  agent_collaboration_sessions agent_collaboration_sessions[]
+  agent_flow_templates         agent_flow_templates[]
+  agent_flows                  agent_flows[]
+  agent_registry               agent_registry[]
+  agents                       agents[]
+  attachments                  attachments[]
+  comments                     comments[]
+  contacts                     contacts[]
+  contexts                     contexts[]
+  credentials                  credentials[]
+  document_chunks              document_chunks[]
+  episodes                     episodes[]
+  events                       events[]
+  groups                       groups[]
+  mcp_servers                  mcp_servers[]
+  memory_items                 memory_items[]
+  messages                     messages[]
+  model_registry               model_registry[]
+  notes                        notes[]
+  participants                 participants[]
+  prompts                      prompts[]
+  tool_calls                   tool_calls[]
+  tool_registry                tool_registry[]
+  tools                        tools[]
+  users                        users[]
+
+  @@index([status], map: "idx_workspaces_status")
+  @@index([type], map: "idx_workspaces_type")
+}

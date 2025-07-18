@@ -1,0 +1,104 @@
+name: Visual Regression Testing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  visual-regression:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for proper comparison
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
+      
+      - name: Check for existing snapshots
+        id: check-snapshots
+        run: |
+          if [ -d "e2e/visual/__snapshots__" ]; then
+            echo "snapshots_exist=true" >> $GITHUB_OUTPUT
+          else
+            echo "snapshots_exist=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Generate baseline snapshots
+        if: steps.check-snapshots.outputs.snapshots_exist == 'false'
+        run: |
+          pnpm exec playwright test --config=playwright.visual.config.ts --update-snapshots
+          echo "Baseline snapshots generated. Please commit these to the repository."
+          exit 1 # Exit with error to prevent further steps
+      
+      - name: Run visual regression tests
+        if: steps.check-snapshots.outputs.snapshots_exist == 'true'
+        run: pnpm exec playwright test --config=playwright.visual.config.ts
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-visual-report
+          path: playwright-report/
+          retention-days: 30
+      
+      - name: Upload diff images
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: visual-test-diffs
+          path: e2e/visual/__snapshots__/**/*-diff.png
+          retention-days: 30
+      
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            
+            // Create a comment with the test results
+            const comment = `## Visual Regression Test Results
+            
+            ❌ Visual regression tests failed. There are visual differences between the baseline and the current version.
+            
+            Please check the artifacts for details:
+            - [Test Report](https://github.com/${owner}/${repo}/actions/runs/${context.runId})
+            - [Visual Diffs](https://github.com/${owner}/${repo}/actions/runs/${context.runId})
+            
+            If these changes are intentional, please update the snapshots by running:
+            \`\`\`
+            pnpm exec playwright test --config=playwright.visual.config.ts --update-snapshots
+            \`\`\`
+            `;
+            
+            github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: comment
+            });

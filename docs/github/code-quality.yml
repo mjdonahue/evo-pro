@@ -1,0 +1,219 @@
+name: Code Quality Metrics
+
+on:
+  # Run on schedule (weekly)
+  schedule:
+    - cron: '0 0 * * 1'  # Run at midnight on Monday
+  
+  # Run on pull requests to main branch
+  pull_request:
+    branches: [ main ]
+    
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  code-quality:
+    name: Collect Code Quality Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for accurate metrics
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      
+      - name: Run tests with coverage
+        run: pnpm coverage
+        continue-on-error: true  # Continue even if tests fail
+      
+      - name: Collect code quality metrics
+        run: pnpm quality:metrics
+      
+      - name: Upload metrics JSON
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-quality-metrics
+          path: code-quality-reports/metrics.json
+          retention-days: 90
+      
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-quality-report
+          path: code-quality-reports/report.html
+          retention-days: 90
+      
+      - name: Upload duplication report
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-duplication-report
+          path: code-quality-reports/duplications
+          retention-days: 90
+      
+      - name: Comment on PR with summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const metricsData = JSON.parse(fs.readFileSync('code-quality-reports/metrics.json', 'utf8'));
+              const summary = metricsData.summary;
+              
+              // Create a status emoji based on the overall status
+              let statusEmoji = '✅';
+              if (summary.status === 'warning') {
+                statusEmoji = '⚠️';
+              } else if (summary.status === 'fail' || summary.status === 'error') {
+                statusEmoji = '❌';
+              }
+              
+              // Create a markdown table for the metrics
+              const metricsTable = `
+              | Metric | Status | Details |
+              | ------ | ------ | ------- |
+              | ESLint | ${getStatusEmoji(metricsData.eslint.status)} | ${metricsData.eslint.errorCount} errors, ${metricsData.eslint.warningCount} warnings |
+              | Complexity | ${getStatusEmoji(metricsData.complexity.status)} | Avg: ${metricsData.complexity.averageComplexity.toFixed(2)}, High: ${metricsData.complexity.highComplexityCount} |
+              | Coverage | ${getStatusEmoji(metricsData.coverage.status)} | Lines: ${metricsData.coverage.lines.toFixed(2)}%, Functions: ${metricsData.coverage.functions.toFixed(2)}% |
+              | Duplication | ${getStatusEmoji(metricsData.duplications.status)} | ${metricsData.duplications.percentage.toFixed(2)}% |
+              | TypeScript | ${getStatusEmoji(metricsData.typescript.status)} | ${metricsData.typescript.errorCount} errors |
+              | Rust Clippy | ${getStatusEmoji(metricsData.rust.clippy.status)} | ${metricsData.rust.clippy.errorCount || 0} errors |
+              | Rust Tests | ${getStatusEmoji(metricsData.rust.tests.status)} | ${metricsData.rust.tests.count} tests |
+              `;
+              
+              // Create the comment body
+              const body = `## Code Quality Report ${statusEmoji}
+              
+              **Overall Score:** ${summary.score}/100 (${summary.status.toUpperCase()})
+              
+              ${metricsTable}
+              
+              [View detailed report](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})
+              `;
+              
+              // Post the comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            } catch (error) {
+              console.error('Error creating PR comment:', error);
+              
+              // Post a simplified comment if there was an error
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `## Code Quality Report
+                
+                There was an error generating the detailed report. Please check the [workflow run](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}) for more information.`
+              });
+            }
+            
+            // Helper function to get status emoji
+            function getStatusEmoji(status) {
+              if (status === 'pass') return '✅';
+              if (status === 'warning') return '⚠️';
+              if (status === 'fail' || status === 'error') return '❌';
+              return '❓';
+            }
+      
+      - name: Create GitHub Issue with results
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const metricsData = JSON.parse(fs.readFileSync('code-quality-reports/metrics.json', 'utf8'));
+              const summary = metricsData.summary;
+              
+              // Create a status emoji based on the overall status
+              let statusEmoji = '✅';
+              if (summary.status === 'warning') {
+                statusEmoji = '⚠️';
+              } else if (summary.status === 'fail' || summary.status === 'error') {
+                statusEmoji = '❌';
+              }
+              
+              // Create a markdown table for the metrics
+              const metricsTable = `
+              | Metric | Status | Details |
+              | ------ | ------ | ------- |
+              | ESLint | ${getStatusEmoji(metricsData.eslint.status)} | ${metricsData.eslint.errorCount} errors, ${metricsData.eslint.warningCount} warnings |
+              | Complexity | ${getStatusEmoji(metricsData.complexity.status)} | Avg: ${metricsData.complexity.averageComplexity.toFixed(2)}, High: ${metricsData.complexity.highComplexityCount} |
+              | Coverage | ${getStatusEmoji(metricsData.coverage.status)} | Lines: ${metricsData.coverage.lines.toFixed(2)}%, Functions: ${metricsData.coverage.functions.toFixed(2)}% |
+              | Duplication | ${getStatusEmoji(metricsData.duplications.status)} | ${metricsData.duplications.percentage.toFixed(2)}% |
+              | TypeScript | ${getStatusEmoji(metricsData.typescript.status)} | ${metricsData.typescript.errorCount} errors |
+              | Rust Clippy | ${getStatusEmoji(metricsData.rust.clippy.status)} | ${metricsData.rust.clippy.errorCount || 0} errors |
+              | Rust Tests | ${getStatusEmoji(metricsData.rust.tests.status)} | ${metricsData.rust.tests.count} tests |
+              `;
+              
+              // Create the issue body
+              const body = `## Code Quality Report ${statusEmoji}
+              
+              **Overall Score:** ${summary.score}/100 (${summary.status.toUpperCase()})
+              
+              ${metricsTable}
+              
+              [View detailed report](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})
+              
+              Generated on ${new Date().toISOString().split('T')[0]}
+              `;
+              
+              // Create the issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Code Quality Report - ${new Date().toISOString().split('T')[0]}`,
+                body: body,
+                labels: ['code-quality', 'automated']
+              });
+            } catch (error) {
+              console.error('Error creating issue:', error);
+              
+              // Create a simplified issue if there was an error
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Code Quality Report - ${new Date().toISOString().split('T')[0]}`,
+                body: `There was an error generating the detailed report. Please check the [workflow run](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}) for more information.`,
+                labels: ['code-quality', 'automated']
+              });
+            }
+            
+            // Helper function to get status emoji
+            function getStatusEmoji(status) {
+              if (status === 'pass') return '✅';
+              if (status === 'warning') return '⚠️';
+              if (status === 'fail' || status === 'error') return '❌';
+              return '❓';
+            }

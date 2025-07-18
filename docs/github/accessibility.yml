@@ -1,0 +1,115 @@
+name: Accessibility Testing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  accessibility:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
+      
+      - name: Run accessibility tests
+        run: pnpm exec playwright test --config=playwright.accessibility.config.ts
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: accessibility-report
+          path: |
+            playwright-report/
+            accessibility-results/
+          retention-days: 30
+      
+      - name: Generate accessibility report
+        if: always()
+        run: |
+          echo "# Accessibility Test Report" > accessibility-report.md
+          echo "Generated on $(date)" >> accessibility-report.md
+          echo "" >> accessibility-report.md
+          
+          if [ -f "accessibility-results/results.json" ]; then
+            echo "## Summary" >> accessibility-report.md
+            
+            # Extract summary information from the JSON file
+            violations=$(jq '.suites[].specs[] | select(.ok == false) | .tests[].results[] | select(.status == "failed") | .message' accessibility-results/results.json | wc -l)
+            passes=$(jq '.suites[].specs[] | select(.ok == true) | .tests[].results[] | select(.status == "passed") | .message' accessibility-results/results.json | wc -l)
+            
+            echo "- Violations: $violations" >> accessibility-report.md
+            echo "- Passes: $passes" >> accessibility-report.md
+            
+            if [ "$violations" -gt 0 ]; then
+              echo "" >> accessibility-report.md
+              echo "## Violations" >> accessibility-report.md
+              
+              # Extract violation details
+              jq -r '.suites[].specs[] | select(.ok == false) | "### " + .title + "\n\n" + (.tests[].results[] | select(.status == "failed") | .message) + "\n"' accessibility-results/results.json >> accessibility-report.md
+            fi
+          else
+            echo "No accessibility results found." >> accessibility-report.md
+          fi
+      
+      - name: Upload accessibility report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: accessibility-report-md
+          path: accessibility-report.md
+          retention-days: 30
+      
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            
+            let reportContent = '';
+            try {
+              reportContent = fs.readFileSync('accessibility-report.md', 'utf8');
+            } catch (error) {
+              reportContent = 'Failed to read accessibility report.';
+            }
+            
+            // Create a comment with the test results
+            const comment = `## Accessibility Test Results
+            
+            ${reportContent}
+            
+            [Full Report](https://github.com/${owner}/${repo}/actions/runs/${context.runId})
+            `;
+            
+            github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: comment
+            });

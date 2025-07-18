@@ -1,0 +1,183 @@
+name: Security Testing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sundays at midnight
+
+jobs:
+  js-security:
+    name: JavaScript/TypeScript Security Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run ESLint with security plugins
+        run: pnpm lint
+
+      - name: Run pnpm audit
+        run: pnpm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'evo-pro'
+          path: '.'
+          format: 'HTML'
+          out: 'reports'
+          args: >
+            --scan node_modules
+            --suppression ./.github/workflows/suppressions.xml
+            --failOnCVSS 7
+            --enableRetired
+
+      - name: Upload Dependency-Check report
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-check-report
+          path: reports
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  rust-security:
+    name: Rust Security Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+
+      - name: Install cargo-audit
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-audit
+
+      - name: Install cargo-deny
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-deny
+
+      - name: Install cargo-geiger
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-geiger
+
+      - name: Run Clippy with security lints
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features -- -D warnings -W clippy::all -W clippy::pedantic -W clippy::nursery -W clippy::cargo
+
+      - name: Run cargo-audit
+        uses: actions-rs/cargo@v1
+        with:
+          command: audit
+          args: --deny warnings
+
+      - name: Run cargo-deny
+        uses: actions-rs/cargo@v1
+        with:
+          command: deny
+          args: check
+
+      - name: Run cargo-geiger
+        uses: actions-rs/cargo@v1
+        with:
+          command: geiger
+          args: --output-format json --all-features > geiger-report.json
+
+      - name: Upload Geiger report
+        uses: actions/upload-artifact@v3
+        with:
+          name: geiger-report
+          path: geiger-report.json
+
+  sonarcloud:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=evo-pro
+            -Dsonar.organization=evo-pro-org
+            -Dsonar.sources=src,src-tauri/src
+            -Dsonar.tests=src/__tests__
+            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+
+  security-report:
+    name: Generate Security Report
+    needs: [js-security, rust-security, sonarcloud]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Generate Security Report
+        run: |
+          echo "# Security Testing Report" > security-report.md
+          echo "## Summary" >> security-report.md
+          echo "Security testing completed on $(date)" >> security-report.md
+          echo "## Dependency Check Results" >> security-report.md
+          echo "See the dependency-check-report artifact for details." >> security-report.md
+          echo "## Geiger Results" >> security-report.md
+          echo "See the geiger-report artifact for details." >> security-report.md
+          echo "## SonarCloud Results" >> security-report.md
+          echo "See the SonarCloud dashboard for details." >> security-report.md
+
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-report.md

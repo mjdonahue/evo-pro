@@ -1,0 +1,167 @@
+name: Load and Stress Testing
+
+on:
+  # Run on schedule (once a week)
+  schedule:
+    - cron: '0 0 * * 0'  # Run at midnight on Sunday
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of load test to run'
+        required: true
+        default: 'load'
+        type: choice
+        options:
+          - smoke
+          - load
+          - stress
+          - spike
+          - soak
+
+jobs:
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Start application in background
+        run: |
+          pnpm dev &
+          echo "Waiting for application to start..."
+          sleep 30
+      
+      - name: Install k6
+        run: |
+          curl -L https://github.com/grafana/k6/releases/download/v0.45.0/k6-v0.45.0-linux-amd64.tar.gz | tar xz
+          sudo mv k6-v0.45.0-linux-amd64/k6 /usr/local/bin
+      
+      - name: Determine test type
+        id: test-type
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "type=${{ github.event.inputs.test_type }}" >> $GITHUB_OUTPUT
+          else
+            echo "type=load" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run load test
+        run: |
+          # Modify the config.js to use the test type from the input
+          sed -i "s/export const options = createOptions('load'/export const options = createOptions('${{ steps.test-type.outputs.type }}'/g" load-tests/api-load-test.js
+          
+          # Run the test
+          k6 run load-tests/api-load-test.js --out json=load-test-results.json
+        continue-on-error: true
+      
+      - name: Generate load test report
+        run: |
+          echo "# Load Test Report" > load-test-report.md
+          echo "Generated on $(date)" >> load-test-report.md
+          echo "" >> load-test-report.md
+          echo "## Test Type: ${{ steps.test-type.outputs.type }}" >> load-test-report.md
+          echo "" >> load-test-report.md
+          
+          if [ -f "load-test-results.json" ]; then
+            echo "## Summary" >> load-test-report.md
+            
+            # Extract summary information from the JSON file
+            vus=$(jq '.metrics.vus.values.max' load-test-results.json)
+            duration=$(jq '.metrics.iteration_duration.values.avg' load-test-results.json)
+            requests=$(jq '.metrics.http_reqs.values.count' load-test-results.json)
+            failures=$(jq '.metrics.http_req_failed.values.passes' load-test-results.json)
+            
+            echo "- Virtual Users: $vus" >> load-test-report.md
+            echo "- Average Iteration Duration: $(printf "%.2f" $duration) ms" >> load-test-report.md
+            echo "- Total Requests: $requests" >> load-test-report.md
+            echo "- Failed Requests: $failures" >> load-test-report.md
+            
+            echo "" >> load-test-report.md
+            echo "## Response Time" >> load-test-report.md
+            
+            avg=$(jq '.metrics.http_req_duration.values.avg' load-test-results.json)
+            min=$(jq '.metrics.http_req_duration.values.min' load-test-results.json)
+            med=$(jq '.metrics.http_req_duration.values.med' load-test-results.json)
+            max=$(jq '.metrics.http_req_duration.values.max' load-test-results.json)
+            p90=$(jq '.metrics.http_req_duration.values["p(90)"]' load-test-results.json)
+            p95=$(jq '.metrics.http_req_duration.values["p(95)"]' load-test-results.json)
+            p99=$(jq '.metrics.http_req_duration.values["p(99)"]' load-test-results.json)
+            
+            echo "- Average: $(printf "%.2f" $avg) ms" >> load-test-report.md
+            echo "- Min: $(printf "%.2f" $min) ms" >> load-test-report.md
+            echo "- Median: $(printf "%.2f" $med) ms" >> load-test-report.md
+            echo "- Max: $(printf "%.2f" $max) ms" >> load-test-report.md
+            echo "- p90: $(printf "%.2f" $p90) ms" >> load-test-report.md
+            echo "- p95: $(printf "%.2f" $p95) ms" >> load-test-report.md
+            echo "- p99: $(printf "%.2f" $p99) ms" >> load-test-report.md
+            
+            # Check if any thresholds were exceeded
+            echo "" >> load-test-report.md
+            echo "## Thresholds" >> load-test-report.md
+            
+            thresholds=$(jq '.metrics | to_entries[] | select(.key | endswith("_thresholds")) | .key' load-test-results.json)
+            
+            if [ -z "$thresholds" ]; then
+              echo "No thresholds were exceeded." >> load-test-report.md
+            else
+              echo "The following thresholds were exceeded:" >> load-test-report.md
+              for threshold in $thresholds; do
+                metric=$(echo $threshold | sed 's/_thresholds//')
+                echo "- $metric" >> load-test-report.md
+              done
+            fi
+          else
+            echo "No load test results found." >> load-test-report.md
+          fi
+      
+      - name: Upload load test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: load-test-results
+          path: |
+            load-test-results.json
+            load-test-report.md
+          retention-days: 30
+      
+      - name: Create GitHub Issue with results
+        if: github.event_name == 'schedule'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            let reportContent = '';
+            try {
+              reportContent = fs.readFileSync('load-test-report.md', 'utf8');
+            } catch (error) {
+              reportContent = 'Failed to read load test report.';
+            }
+            
+            // Create an issue with the test results
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Load Test Results - ${new Date().toISOString().split('T')[0]}`,
+              body: reportContent,
+              labels: ['load-test', 'automated']
+            });

@@ -1,0 +1,1 @@
+../migrations/0002_add_updated_at_triggers.sql

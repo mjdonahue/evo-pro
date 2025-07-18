@@ -1,0 +1,96 @@
+{
+  "name": "Kameo",
+  "description": "Distributed, Fault-tolerant Async Actors Powered by Tokio",
+  "root": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        {
+          "title": "Introduction",
+          "href": "/",
+          "icon": "globe"
+        },
+        {
+          "title": "Getting Started",
+          "href": "/getting-started",
+          "icon": "rocket"
+        }
+      ]
+    },
+    {
+      "group": "Core Concepts",
+      "pages": [
+        {
+          "title": "Overview",
+          "href": "/core-concepts",
+          "icon": "book"
+        },
+        {
+          "title": "Actors",
+          "href": "/core-concepts/actors",
+          "icon": "users"
+        },
+        {
+          "title": "Messages",
+          "href": "/core-concepts/messages",
+          "icon": "envelope"
+        },
+        {
+          "title": "Requests",
+          "href": "/core-concepts/requests",
+          "icon": "question"
+        },
+        {
+          "title": "Replies",
+          "href": "/core-concepts/replies",
+          "icon": "reply"
+        },
+        {
+          "title": "Supervision",
+          "href": "/core-concepts/supervision",
+          "icon": "shield-alt"
+        }
+      ]
+    },
+    {
+      "group": "Distributed Actors",
+      "pages": [
+        {
+          "title": "Overview",
+          "href": "/distributed-actors",
+          "icon": "network-wired"
+        },
+        {
+          "title": "Bootstrapping the Actor Swarm",
+          "href": "/distributed-actors/bootstrapping-actor-swarm",
+          "icon": "play-circle"
+        },
+        {
+          "title": "Custom Swarm Configuration",
+          "href": "/distributed-actors/custom-swarm-configuration",
+          "icon": "cogs"
+        },
+        {
+          "title": "Registering and Looking up Actors",
+          "href": "/distributed-actors/registering-looking-up-actors",
+          "icon": "user-tag"
+        },
+        {
+          "title": "Messaging Remote Actors",
+          "href": "/distributed-actors/messaging-remote-actors",
+          "icon": "envelope-open-text"
+        }
+      ]
+    },
+    {
+      "group": "Additional Resources",
+      "pages": [
+        {
+          "title": "FAQ",
+          "href": "/faq",
+          "icon": "question-circle"
+        }
+      ]
+    }
+  ]
+}

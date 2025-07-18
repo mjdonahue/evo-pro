@@ -1,0 +1,184 @@
+name: Performance Benchmarks
+
+on:
+  # Run on schedule (weekly)
+  schedule:
+    - cron: '0 0 * * 1'  # Run at midnight on Monday
+  
+  # Run on specific events
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - '.github/workflows/performance-benchmarks.yml'
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      benchmark_type:
+        description: 'Type of benchmark to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - algorithms
+          - string-manipulation
+          - react-components
+
+jobs:
+  benchmark:
+    name: Run Performance Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for accurate benchmarking
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Download previous benchmark results
+        uses: actions/download-artifact@v3
+        with:
+          name: benchmark-results
+          path: benchmark-results
+        continue-on-error: true  # Continue if there are no previous results
+      
+      - name: Create benchmark results directory if it doesn't exist
+        run: mkdir -p benchmark-results
+      
+      - name: Run benchmarks
+        run: |
+          # Determine which benchmarks to run based on input
+          BENCHMARK_TYPE="${{ github.event.inputs.benchmark_type || 'all' }}"
+          
+          if [ "$BENCHMARK_TYPE" = "all" ] || [ "$BENCHMARK_TYPE" = "algorithms" ]; then
+            echo "Running algorithm benchmarks..."
+            node -r ts-node/register src/__tests__/performance/example.bench.ts
+          fi
+          
+          # Add more benchmark types as needed
+          # if [ "$BENCHMARK_TYPE" = "all" ] || [ "$BENCHMARK_TYPE" = "react-components" ]; then
+          #   echo "Running React component benchmarks..."
+          #   node -r ts-node/register src/__tests__/performance/react-components.bench.ts
+          # fi
+      
+      - name: Generate benchmark report
+        run: |
+          # Create a summary of the benchmark results
+          echo "# Performance Benchmark Results" > benchmark-summary.md
+          echo "Run on $(date)" >> benchmark-summary.md
+          echo "" >> benchmark-summary.md
+          
+          # List all benchmark histories
+          echo "## Benchmarks" >> benchmark-summary.md
+          
+          # Find all history files
+          HISTORY_FILES=$(find benchmark-results -name "*-history.json")
+          
+          if [ -z "$HISTORY_FILES" ]; then
+            echo "No benchmark history files found." >> benchmark-summary.md
+          else
+            for file in $HISTORY_FILES; do
+              # Extract benchmark name from filename
+              BENCHMARK_NAME=$(basename "$file" | sed 's/-history.json//' | sed 's/-/ /g')
+              
+              # Extract latest result from history file
+              LATEST_RESULT=$(jq '.entries[0].averageTime' "$file")
+              
+              # Extract baseline from history file
+              BASELINE=$(jq '.baseline' "$file")
+              
+              # Calculate difference if baseline exists
+              if [ "$BASELINE" != "null" ]; then
+                DIFF=$(echo "scale=2; (($LATEST_RESULT - $BASELINE) / $BASELINE) * 100" | bc)
+                echo "- $BENCHMARK_NAME: ${LATEST_RESULT}ms (${DIFF}% from baseline)" >> benchmark-summary.md
+              else
+                echo "- $BENCHMARK_NAME: ${LATEST_RESULT}ms (no baseline)" >> benchmark-summary.md
+              fi
+            done
+          fi
+          
+          # Add link to full report
+          echo "" >> benchmark-summary.md
+          echo "For detailed results, see the [full benchmark report](./benchmark-results/benchmark-report.html)." >> benchmark-summary.md
+      
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: benchmark-results
+          retention-days: 90  # Keep results for 90 days
+      
+      - name: Upload benchmark summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-summary
+          path: benchmark-summary.md
+          retention-days: 90
+      
+      - name: Comment on PR with benchmark results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const summaryContent = fs.readFileSync('benchmark-summary.md', 'utf8');
+              
+              const comment = `## Performance Benchmark Results
+              
+              ${summaryContent}
+              
+              [View detailed results](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})
+              `;
+              
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            } catch (error) {
+              console.error('Error creating PR comment:', error);
+            }
+      
+      - name: Create GitHub Issue with benchmark results
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const summaryContent = fs.readFileSync('benchmark-summary.md', 'utf8');
+              
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Performance Benchmark Results - ${new Date().toISOString().split('T')[0]}`,
+                body: summaryContent,
+                labels: ['performance', 'benchmark', 'automated']
+              });
+            } catch (error) {
+              console.error('Error creating issue:', error);
+            }
