@@ -53,7 +53,7 @@ module.exports = {
     'react/prop-types': 'off', // We use TypeScript for prop validation
     'react/react-in-jsx-scope': 'off', // Not needed in React 17+
     'sonarjs/cognitive-complexity': ['error', 15],
-    'sonarjs/no-duplicate-string': ['error', 3],
+    'sonarjs/no-duplicate-string': ['error', { threshold: 3 }],
     'import/order': [
       'error',
       {
